@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Azure Snake - Deluxe Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        html, body { 
+            overscroll-behavior: none; 
+            touch-action: none; 
+            background-color: #1a2e1a; 
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #gameCanvas {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+            border-radius: 0 0 12px 12px;
+            display: block;
+            /* Ukuran akan diatur secara dinamis oleh JS */
+        }
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake { animation: shake 0.5s; }
+
+        /* Penyesuaian kontainer agar fleksibel secara vertikal */
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            width: 95vw;
+            height: 95vh;
+            max-width: 500px;
+            max-height: 800px;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body class="p-2 sm:p-4">
+
+    <div id="gameContainer" class="relative">
+        <!-- Dashboard Skor -->
+        <div id="scoreBoard" class="w-full flex justify-between items-center bg-[#1b331b] p-3 sm:p-4 rounded-t-2xl text-white font-bold shadow-lg border-b border-[#2d4d2d]">
+            <div class="flex items-center gap-2 sm:gap-3">
+                <i class="fa-solid fa-apple-whole text-[#ff4d4d] text-xl sm:text-2xl drop-shadow-md"></i>
+                <span id="scoreDisplay" class="text-xl sm:text-2xl">0</span>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <i class="fa-solid fa-gem text-[#00f2ff] text-xl sm:text-2xl drop-shadow-[0_0_8px_rgba(0,242,255,0.8)]"></i>
+                <span id="highScoreDisplay" class="text-xl sm:text-2xl">0</span>
+            </div>
+        </div>
+
+        <!-- Area Kanvas (Pembungkus untuk menjaga aspek rasio) -->
+        <div id="canvasWrapper" class="flex-grow flex items-start justify-center overflow-hidden">
+            <canvas id="gameCanvas" class="bg-[#1b331b]"></canvas>
+        </div>
+
+        <!-- Layar Start -->
+        <div id="startScreen" class="absolute inset-0 flex items-center justify-center z-20">
+            <div class="bg-[#1b331b]/95 p-6 sm:p-8 rounded-3xl shadow-2xl text-center border border-[#2d4d2d] mx-4">
+                <div class="flex justify-center mb-4">
+                    <div class="w-12 h-12 sm:w-16 sm:h-16 bg-[#00d4ff] rounded-full flex items-center justify-center shadow-lg">
+                        <i class="fa-solid fa-snake text-[#1b331b] text-2xl sm:text-3xl"></i>
+                    </div>
+                </div>
+                <h1 class="text-2xl sm:text-3xl font-black text-white mb-2 uppercase tracking-tighter">Azure Snake</h1>
+                <p class="text-gray-400 mb-6 font-medium italic text-xs sm:text-sm px-2">Geser layar untuk belok!<br>Maksimal 2 ranjau muncul.</p>
+                <button id="startBtn" class="bg-[#00d4ff] hover:bg-[#00b8e6] text-[#1b331b] font-black py-3 px-10 sm:py-4 sm:px-12 rounded-full text-lg sm:text-xl shadow-xl transition-all active:scale-95 w-full">
+                    MULAI
+                </button>
+            </div>
+        </div>
+
+        <!-- Layar Game Over -->
+        <div id="gameOverScreen" class="absolute inset-0 flex items-center justify-center hidden z-20">
+            <div class="bg-white/95 p-6 sm:p-8 rounded-3xl shadow-2xl text-center border-4 border-red-500 mx-4">
+                <h2 id="deathTitle" class="text-3xl sm:text-4xl font-black text-red-600 mb-2 italic transform -rotate-3 uppercase">ADUHH!</h2>
+                <div id="deathReasonContainer" class="text-gray-600 mb-6 text-lg sm:text-xl font-bold">
+                    <p id="deathReasonText"></p>
+                    <p class="mt-2 text-sm opacity-70">Skor Akhir: <span id="finalScore" class="text-blue-500 text-xl">0</span></p>
+                </div>
+                <button id="restartBtn" class="bg-[#1b331b] text-white font-black py-3 px-10 rounded-full shadow-lg transition-all active:scale-95 hover:bg-black w-full">
+                    COBA LAGI
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-2 text-white/30 text-[9px] font-bold uppercase tracking-widest text-center">
+            SWIPE LAYAR UNTUK MENGONTROL
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const gameContainer = document.getElementById('gameContainer');
+        const canvasWrapper = document.getElementById('canvasWrapper');
+        const scoreBoard = document.getElementById('scoreBoard');
+
+        const cols = 17, rows = 15;
+        let tileSize;
+
+        let snake = [], dx = 1, dy = 0, food = {x: 10, y: 7}, mines = [];
+        let score = 0, highScore = localStorage.getItem('snakeHighScore') || 0;
+        let isGameOver = false, hasStarted = false, isExploded = false;
+        let moveProgress = 0, lastTimestamp = 0;
+        let baseSpeed = 0.005, currentSpeed = baseSpeed;
+
+        highScoreDisplay.innerText = highScore;
+
+        // Fungsi resize yang lebih cerdas untuk mengikuti layar
+        function resizeCanvas() {
+            // Hitung lebar dan tinggi yang tersedia
+            const availableWidth = canvasWrapper.clientWidth;
+            const availableHeight = canvasWrapper.clientHeight;
+            
+            // Cari tileSize terkecil agar muat di lebar DAN tinggi (fluid scaling)
+            const tileWidth = availableWidth / cols;
+            const tileHeight = availableHeight / rows;
+            
+            tileSize = Math.min(tileWidth, tileHeight);
+            
+            // Set dimensi kanvas secara eksplisit
+            canvas.width = tileSize * cols;
+            canvas.height = tileSize * rows;
+            
+            // Paksa gaya lebar/tinggi agar terlihat tajam tapi tetap responsif
+            canvas.style.width = (tileSize * cols) + "px";
+            canvas.style.height = (tileSize * rows) + "px";
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        // Panggil setelah DOM terisi sepenuhnya
+        window.addEventListener('load', resizeCanvas);
+        resizeCanvas();
+
+        function initGame() {
+            resizeCanvas(); // Pastikan ukuran benar saat mulai ulang
+            snake = [{x: 5, y: 7}, {x: 4, y: 7}, {x: 3, y: 7}, {x: 2, y: 7}];
+            dx = 1; dy = 0; score = 0; mines = [];
+            currentSpeed = baseSpeed;
+            moveProgress = 0;
+            isGameOver = false;
+            isExploded = false;
+            hasStarted = false;
+            scoreDisplay.innerText = "0";
+            gameOverScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            spawnFood();
+            requestAnimationFrame(render);
+        }
+
+        function spawnFood() {
+            food = { x: Math.floor(Math.random() * cols), y: Math.floor(Math.random() * rows) };
+            if (snake.some(s => s.x === food.x && s.y === food.y) || mines.some(m => m.x === food.x && m.y === food.y)) {
+                spawnFood();
+            }
+        }
+
+        function spawnMine() {
+            if (mines.length >= 2) return;
+
+            const newMine = { x: Math.floor(Math.random() * cols), y: Math.floor(Math.random() * rows) };
+            if (snake.some(s => s.x === newMine.x && s.y === newMine.y) || 
+                (food.x === newMine.x && food.y === newMine.y) ||
+                mines.some(m => m.x === newMine.x && m.y === newMine.y)) {
+                spawnMine();
+                return;
+            }
+            mines.push(newMine);
+        }
+
+        function relocateMines() {
+            const count = mines.length;
+            mines = [];
+            for(let i = 0; i < count; i++) spawnMine();
+        }
+
+        function handleInput(dir) {
+            if (!hasStarted || isGameOver) return;
+            if (dir === 'up' && dy !== 1) { dx = 0; dy = -1; }
+            else if (dir === 'down' && dy !== -1) { dx = 0; dy = 1; }
+            else if (dir === 'left' && dx !== 1) { dx = -1; dy = 0; }
+            else if (dir === 'right' && dx !== -1) { dx = 1; dy = 0; }
+        }
+
+        // Desktop Controls
+        window.addEventListener('keydown', e => {
+            const key = e.key.toLowerCase();
+            if (key === 'arrowup' || key === 'w') handleInput('up');
+            if (key === 'arrowdown' || key === 's') handleInput('down');
+            if (key === 'arrowleft' || key === 'a') handleInput('left');
+            if (key === 'arrowright' || key === 'd') handleInput('right');
+            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
+        });
+
+        // Touch Controls (Swipe)
+        let tStartX = 0, tStartY = 0;
+        document.addEventListener('touchstart', e => {
+            tStartX = e.changedTouches[0].screenX;
+            tStartY = e.changedTouches[0].screenY;
+        }, {passive: false});
+
+        document.addEventListener('touchend', e => {
+            let tEndX = e.changedTouches[0].screenX;
+            let tEndY = e.changedTouches[0].screenY;
+            let swipeDx = tEndX - tStartX;
+            let swipeDy = tEndY - tStartY;
+            if (Math.abs(swipeDx) > Math.abs(swipeDy)) {
+                if (Math.abs(swipeDx) > 30) handleInput(swipeDx > 0 ? 'right' : 'left');
+            } else {
+                if (Math.abs(swipeDy) > 30) handleInput(swipeDy > 0 ? 'down' : 'up');
+            }
+        }, {passive: false});
+
+        function update(deltaTime) {
+            if (!hasStarted || isGameOver) return;
+            moveProgress += deltaTime * currentSpeed;
+
+            if (moveProgress >= 1) {
+                moveProgress = 0;
+                const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+                if (mines.some(m => m.x === head.x && m.y === head.y)) {
+                    isExploded = true;
+                    endGame("DUAARR!", "Kena ranjau! Kepala ular gosong!");
+                    return;
+                }
+                if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
+                    endGame("ADUHH!", "Ular benjol nabrak tembok!");
+                    return;
+                }
+                if (snake.some(s => s.x === head.x && s.y === head.y)) {
+                    endGame("OWW!", "Ular gigit buntut sendiri!");
+                    return;
+                }
+
+                snake.unshift(head);
+                if (head.x === food.x && head.y === food.y) {
+                    score++;
+                    scoreDisplay.innerText = score;
+                    currentSpeed += 0.00015;
+                    if (score === 10 || score === 20) spawnMine();
+                    if (score > 10 && score % 5 === 0) relocateMines();
+                    spawnFood();
+                } else {
+                    snake.pop();
+                }
+            }
+        }
+
+        function render(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const deltaTime = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+            update(deltaTime);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Kotak latar belakang
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    ctx.fillStyle = (r + c) % 2 === 0 ? '#1b331b' : '#142614';
+                    ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+                }
+            }
+
+            // Makanan
+            const fx = food.x * tileSize + tileSize/2;
+            const fy = food.y * tileSize + tileSize/2;
+            ctx.fillStyle = '#ff4d4d';
+            ctx.beginPath(); ctx.arc(fx, fy, tileSize/2.5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#4CAF50';
+            ctx.beginPath(); ctx.ellipse(fx+2, fy-tileSize/4, tileSize/8, tileSize/20, Math.PI/4, 0, Math.PI*2); ctx.fill();
+
+            // Ranjau
+            mines.forEach(m => {
+                const mx = m.x * tileSize + tileSize/2;
+                const my = m.y * tileSize + tileSize/2;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(mx-tileSize/3, my-tileSize/3, (tileSize/3)*2, (tileSize/3)*2);
+                ctx.fillStyle = (Math.floor(timestamp / 500) % 2 === 0) ? '#f00' : '#600';
+                ctx.beginPath(); ctx.arc(mx, my, tileSize/10, 0, Math.PI*2); ctx.fill();
+            });
+
+            // Ular
+            if (snake.length > 0) {
+                const headX = (snake[0].x + (isGameOver ? 0 : dx * moveProgress)) * tileSize + tileSize/2;
+                const headY = (snake[0].y + (isGameOver ? 0 : dy * moveProgress)) * tileSize + tileSize/2;
+
+                // Lidah
+                if (!isGameOver && Math.floor(timestamp / 200) % 2 === 0) {
+                    ctx.strokeStyle = '#ff3366';
+                    ctx.lineWidth = tileSize / 10;
+                    ctx.beginPath();
+                    ctx.moveTo(headX, headY);
+                    ctx.lineTo(headX + dx * (tileSize/1.5), headY + dy * (tileSize/1.5));
+                    ctx.stroke();
+                }
+
+                // Gambar Badan
+                ctx.beginPath();
+                ctx.lineWidth = tileSize - 4;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.strokeStyle = '#00d4ff'; 
+                
+                ctx.moveTo(headX, headY);
+                for (let i = 0; i < snake.length; i++) {
+                    let currX, currY;
+                    if (i === 0) {
+                        currX = headX; currY = headY;
+                    } else {
+                        const prev = snake[i-1], curr = snake[i];
+                        const prog = isGameOver ? 0 : moveProgress;
+                        currX = (curr.x + (prev.x - curr.x) * prog) * tileSize + tileSize/2;
+                        currY = (curr.y + (prev.y - curr.y) * prog) * tileSize + tileSize/2;
+                    }
+                    ctx.lineTo(currX, currY);
+                }
+                ctx.stroke();
+
+                // EFEK BENJOL DAN KEKALAHAN
+                if (isGameOver) {
+                    if (isExploded) {
+                        ctx.fillStyle = '#333';
+                        ctx.beginPath(); ctx.arc(headX, headY, tileSize/2, 0, Math.PI*2); ctx.fill();
+                    } else {
+                        // Efek Benjol (Bintang Kuning)
+                        ctx.fillStyle = '#ffcc00';
+                        ctx.beginPath();
+                        ctx.arc(headX + (dx * (tileSize/3)), headY + (dy * (tileSize/3)) - (tileSize/3), tileSize/4, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = '#ffff00';
+                        ctx.font = `bold ${tileSize/2}px Arial`;
+                        ctx.textAlign = "center";
+                        ctx.fillText('⭐', headX + (dx * (tileSize/4)), headY + (dy * (tileSize/4)) - (tileSize/2.5));
+                    }
+                }
+
+                // Mata
+                const eyeColor = isExploded ? '#ffcc00' : 'white';
+                const eyeSize = tileSize / 5;
+                const offsetX = dy * (tileSize/4);
+                const offsetY = dx * (tileSize/4);
+                
+                ctx.fillStyle = eyeColor;
+                ctx.beginPath();
+                ctx.arc(headX + (dx*tileSize/4) - offsetX, headY + (dy*tileSize/4) - offsetY, eyeSize, 0, Math.PI*2);
+                ctx.arc(headX + (dx*tileSize/4) + offsetX, headY + (dy*tileSize/4) + offsetY, eyeSize, 0, Math.PI*2);
+                ctx.fill();
+
+                if (isGameOver) {
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    const drawX = (cx, cy) => {
+                        ctx.beginPath();
+                        ctx.moveTo(cx - 3, cy - 3); ctx.lineTo(cx + 3, cy + 3);
+                        ctx.moveTo(cx + 3, cy - 3); ctx.lineTo(cx - 3, cy + 3);
+                        ctx.stroke();
+                    };
+                    drawX(headX + (dx*tileSize/4) - offsetX, headY + (dy*tileSize/4) - offsetY);
+                    drawX(headX + (dx*tileSize/4) + offsetX, headY + (dy*tileSize/4) + offsetY);
+                } else {
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(headX + (dx*tileSize/3) - offsetX, headY + (dy*tileSize/3) - offsetY, eyeSize/2, 0, Math.PI*2);
+                    ctx.arc(headX + (dx*tileSize/3) + offsetX, headY + (dy*tileSize/3) + offsetY, eyeSize/2, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        function endGame(title, reason) {
+            if (isGameOver) return;
+            isGameOver = true;
+            if (isExploded) {
+                gameContainer.classList.add('shake');
+                setTimeout(() => gameContainer.classList.remove('shake'), 500);
+            }
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('snakeHighScore', highScore);
+                highScoreDisplay.innerText = highScore;
+            }
+            document.getElementById('deathTitle').innerText = title;
+            document.getElementById('deathReasonText').innerText = reason;
+            document.getElementById('finalScore').innerText = score;
+            setTimeout(() => gameOverScreen.classList.remove('hidden'), 600);
+        }
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            hasStarted = true;
+            startScreen.classList.add('hidden');
+        });
+        document.getElementById('restartBtn').addEventListener('click', initGame);
+        
+        initGame();
+    </script>
+</body>
+</html>
